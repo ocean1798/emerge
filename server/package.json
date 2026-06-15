@@ -1,0 +1,10 @@
+{
+  "name": "emerge-local-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.js",
+    "health": "node src/health.js"
+  }
+}
