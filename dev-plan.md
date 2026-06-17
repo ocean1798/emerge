@@ -24,11 +24,11 @@
 | 17 | 对象内容预览 | ✅ | - | - | - | 已新增 GET /api/assets/:id/preview 与 Inspector 内容预览模块 |
 | 18 | LLM 与本地 Embedding 配置加固 | ✅ | - | - | - | chatPath 可留空并自动默认；Ollama embedding 可在产品内配置、测试并自动选择本机 embedding 模型 |
 | 19 | Trace / 操作历史 | ✅ | - | - | - | 已新增对象级 trace UI，记录 ingest/pipeline、metadata、search、ask |
-| 20 | AI 文件管理和批量导入 | ⏳ | - | - | - | 拖拽导入、多文件导入、失败摘要 |
+| 20 | AI 文件管理和批量导入 | ✅ | - | - | - | 拖拽导入、多文件导入、失败摘要 |
 | 21 | Embedding 状态和重建索引 | ⏳ | - | - | - | index status、单对象/全局 reindex、stale 状态 |
 | 22 | 原始内容存储和预览 | ⏳ | - | - | - | SourceDocument、Original Source、Indexed Chunks 区分 |
 | 23 | Ask/Search History | ⏳ | - | - | - | AskRun/SearchRun 与 History 面板 |
-| 24 | 桌面壳和 Keychain | ⏳ | - | - | - | Tauri/桌面方案与安全 keychain，可按资源后置 |
-| 25 | MVP Hardening Release | ⏳ | - | - | - | 回归、文档、截图、secret scan、已知问题 |
+| 24 | 桌面壳和 Keychain | ✅ | - | - | - | Tauri/桌面方案与安全 keychain，可按资源后置 |
+| 25 | MVP Hardening Release | ✅ | - | - | - | 回归、文档、截图、secret scan、已知问题 |
 
 状态： ⏳ 待办 | 🔄 进行中 | ✅ 完成 | ⚠️ 低质量通过

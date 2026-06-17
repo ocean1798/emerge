@@ -9,6 +9,9 @@ import {
   Tags,
 } from "lucide-react";
 
+import { EmbeddingStatusPanel } from "./EmbeddingStatusPanel";
+import { HistoryPanel } from "./HistoryPanel";
+import { SourcePreviewPanel } from "./SourcePreviewPanel";
 import { StatusPill } from "./StatusPill";
 import { useI18n } from "../i18n";
 import type {
@@ -169,11 +172,18 @@ export function SemanticInspector({
             <p className="summary-copy">{snapshot.summary}</p>
           </section>
 
+          <section className="inspector-section">
+            <SourcePreviewPanel assetId={asset.asset_id} />
+          </section>
+
           <section className="inspector-section object-preview-section">
             <div className="section-heading">
               <FileText size={16} aria-hidden="true" />
-              <span>{t("preview.title")}</span>
+              <span>{t("indexedChunks.title")}</span>
             </div>
+            <p className="source-preview-panel__desc">
+              {t("indexedChunks.description")}
+            </p>
             {previewStatus === "loading" ? (
               <p className="summary-copy">{t("preview.loading")}</p>
             ) : null}
@@ -234,6 +244,10 @@ export function SemanticInspector({
             ) : previewStatus !== "loading" ? (
               <p className="summary-copy">{t("preview.unavailable")}</p>
             ) : null}
+          </section>
+
+          <section className="inspector-section">
+            <EmbeddingStatusPanel assetId={asset.asset_id} />
           </section>
 
           <section className="inspector-section">
@@ -323,6 +337,10 @@ export function SemanticInspector({
                 <dd>{t(`freshness.${snapshot.freshness}`)}</dd>
               </div>
             </dl>
+          </section>
+
+          <section className="inspector-section">
+            <HistoryPanel assetId={asset.asset_id} />
           </section>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { KeyRound, Settings, Sparkles, X } from "lucide-react";
 
+import { EmbeddingStatusPanel } from "./EmbeddingStatusPanel";
 import { useI18n } from "../i18n";
 import type {
   LlmConfigInput,
@@ -186,6 +187,8 @@ export function ModelSettingsModal({
             value={apiKey}
           />
         </label>
+
+        <EmbeddingStatusPanel disabled={isSaving} />
 
         <div className="model-settings__actions">
           <button className="icon-text-button" onClick={onCancel} type="button">

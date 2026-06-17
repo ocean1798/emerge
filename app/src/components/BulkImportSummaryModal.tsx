@@ -74,7 +74,7 @@ export function BulkImportSummaryModal({
             <strong>{summary.succeeded}</strong>
             {t("bulkImport.succeeded")}
           </span>
-          <span className="bulk-import-summary__stat--failed">
+          <span className={summary.failed === 0 ? "bulk-import-summary__stat--failed-muted" : "bulk-import-summary__stat--failed"}>
             <strong>{summary.failed}</strong>
             {t("bulkImport.failed")}
           </span>

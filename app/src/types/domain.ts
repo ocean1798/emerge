@@ -201,3 +201,81 @@ export interface AskResult {
   retrievalMode?: "lexical" | "hybrid";
   embeddingError?: string | null;
 }
+
+export interface IndexStatus {
+  ok: boolean;
+  assets: number;
+  assetsWithChunks: number;
+  totalChunks: number;
+  embeddedChunks: number;
+  lexicalChunks: number;
+  staleChunks: number;
+  embeddingModels: string[];
+  currentModel: string | null;
+}
+
+export interface ReindexResult {
+  ok: boolean;
+  reindexed: number;
+  embedded?: number;
+  model?: string;
+  error?: string;
+  fallback?: string;
+}
+
+export interface SourceDocument {
+  source_id: string;
+  asset_id: string;
+  content: string;
+  char_count: number;
+  truncated: boolean;
+  created_at: string;
+}
+
+export interface AskRun {
+  run_id: string;
+  asset_id?: string;
+  question: string;
+  answer_preview: string;
+  provider?: string;
+  retrieval_mode?: "lexical" | "hybrid";
+  citations_count: number;
+  status: "succeeded" | "failed";
+  error?: string;
+  created_at: string;
+}
+
+export interface SearchRun {
+  run_id: string;
+  asset_id?: string;
+  query: string;
+  result_count: number;
+  retrieval_mode?: "lexical" | "hybrid";
+  status: "succeeded" | "failed";
+  error?: string;
+  created_at: string;
+}
+
+export interface AskRun {
+  run_id: string;
+  asset_id?: string;
+  question: string;
+  answer_preview: string;
+  provider?: string;
+  retrieval_mode?: "lexical" | "hybrid";
+  citations_count: number;
+  status: "succeeded" | "failed";
+  error?: string;
+  created_at: string;
+}
+
+export interface SearchRun {
+  run_id: string;
+  asset_id?: string;
+  query: string;
+  result_count: number;
+  retrieval_mode?: "lexical" | "hybrid";
+  status: "succeeded" | "failed";
+  error?: string;
+  created_at: string;
+}

@@ -13,7 +13,12 @@ const emptyStore = {
   pipelineRuns: [],
   chunks: [],
   traceEvents: [],
+  sourceDocuments: {},
+  askRuns: [],
+  searchRuns: [],
 };
+
+const SOURCE_MAX_CHARS = 50000;
 
 async function ensureStore() {
   await fs.mkdir(dataDir, { recursive: true });
@@ -35,6 +40,9 @@ export async function readStore() {
       pipelineRuns: Array.isArray(parsed.pipelineRuns) ? parsed.pipelineRuns : [],
       chunks: Array.isArray(parsed.chunks) ? parsed.chunks : [],
       traceEvents: Array.isArray(parsed.traceEvents) ? parsed.traceEvents : [],
+      sourceDocuments: parsed.sourceDocuments && typeof parsed.sourceDocuments === "object" ? parsed.sourceDocuments : {},
+      askRuns: Array.isArray(parsed.askRuns) ? parsed.askRuns : [],
+      searchRuns: Array.isArray(parsed.searchRuns) ? parsed.searchRuns : [],
     };
   } catch {
     return { ...emptyStore };
@@ -308,12 +316,27 @@ export function createIngestRecord(input) {
     ],
   };
 
-  return { asset, snapshot, pipelineRun, chunks };
+  const fullContent = content;
+  const truncated = fullContent.length > SOURCE_MAX_CHARS;
+  const sourceDocument = {
+    source_id: `source-${assetId}`,
+    asset_id: assetId,
+    content: truncated ? fullContent.slice(0, SOURCE_MAX_CHARS) : fullContent,
+    char_count: fullContent.length,
+    truncated,
+    created_at: now,
+  };
+
+  return { asset, snapshot, pipelineRun, chunks, sourceDocument };
 }
 
 export async function saveIngestRecord(record) {
   const store = await readStore();
   const traceEvents = traceEventsFromPipelineRun(record.pipelineRun);
+  const nextSourceDocuments = { ...store.sourceDocuments };
+  if (record.sourceDocument) {
+    nextSourceDocuments[record.asset.asset_id] = record.sourceDocument;
+  }
   const nextStore = {
     assets: [record.asset, ...store.assets],
     snapshots: {
@@ -329,6 +352,7 @@ export async function saveIngestRecord(record) {
       ...traceEvents,
       ...store.traceEvents.filter((event) => event.asset_id !== record.asset.asset_id),
     ],
+    sourceDocuments: nextSourceDocuments,
   };
   await writeStore(nextStore);
   return record;
@@ -347,12 +371,18 @@ export async function deleteAsset(assetId) {
   const nextSnapshots = { ...store.snapshots };
   delete nextSnapshots[assetId];
 
+  const nextSourceDocuments = { ...store.sourceDocuments };
+  delete nextSourceDocuments[assetId];
+
   await writeStore({
     assets: store.assets.filter((asset) => asset.asset_id !== assetId),
     snapshots: nextSnapshots,
     pipelineRuns: store.pipelineRuns.filter((run) => run.asset_id !== assetId),
     chunks: store.chunks.filter((chunk) => chunk.asset_id !== assetId),
     traceEvents: store.traceEvents.filter((event) => event.asset_id !== assetId),
+    sourceDocuments: nextSourceDocuments,
+    askRuns: store.askRuns.filter((run) => run.asset_id !== assetId),
+    searchRuns: store.searchRuns.filter((run) => run.asset_id !== assetId),
   });
 
   return deletedAsset;
@@ -479,6 +509,82 @@ export async function getAssetTrace(assetId) {
   };
 }
 
+export async function getIndexStatus(currentEmbedModel) {
+  const store = await readStore();
+  const chunks = store.chunks || [];
+  const totalChunks = chunks.length;
+  const embeddedChunks = chunks.filter((c) => Array.isArray(c.embedding)).length;
+  const lexicalChunks = totalChunks - embeddedChunks;
+
+  const models = new Set();
+  for (const chunk of chunks) {
+    if (chunk.embedding_model) models.add(chunk.embedding_model);
+  }
+
+  const staleChunks = currentEmbedModel
+    ? chunks.filter(
+        (c) =>
+          Array.isArray(c.embedding) &&
+          c.embedding_model &&
+          c.embedding_model !== currentEmbedModel,
+      ).length
+    : 0;
+
+  const assetIds = new Set(chunks.map((c) => c.asset_id));
+
+  return {
+    assets: store.assets.length,
+    assetsWithChunks: assetIds.size,
+    totalChunks,
+    embeddedChunks,
+    lexicalChunks,
+    staleChunks,
+    embeddingModels: [...models],
+    currentModel: currentEmbedModel || null,
+  };
+}
+
+export async function reindexChunks(assetId) {
+  const store = await readStore();
+  const targetChunks = assetId
+    ? store.chunks.filter((c) => c.asset_id === assetId)
+    : store.chunks;
+
+  return { store, targetChunks };
+}
+
+export async function applyReindexResults(updatedChunks, traceEvents) {
+  const store = await readStore();
+  const updatedMap = new Map(updatedChunks.map((c) => [c.chunk_id, c]));
+  const nextChunks = store.chunks.map((c) => updatedMap.get(c.chunk_id) ?? c);
+  await writeStore({
+    ...store,
+    chunks: nextChunks,
+    traceEvents: [...traceEvents, ...store.traceEvents],
+  });
+}
+
+export async function getAssetSource(assetId) {
+  const store = await readStore();
+  const asset = store.assets.find((item) => item.asset_id === assetId);
+  if (!asset) return null;
+
+  const sourceDoc = store.sourceDocuments[assetId];
+  if (!sourceDoc) return null;
+
+  return {
+    source_id: sourceDoc.source_id,
+    asset_id: sourceDoc.asset_id,
+    title: asset.title,
+    kind: asset.kind,
+    source_uri: asset.source_uri,
+    content: sourceDoc.content,
+    char_count: sourceDoc.char_count,
+    truncated: sourceDoc.truncated,
+    created_at: sourceDoc.created_at,
+  };
+}
+
 export async function getAssetPreview(assetId, { limit = 6 } = {}) {
   const store = await readStore();
   const asset = store.assets.find((item) => item.asset_id === assetId);
@@ -512,4 +618,58 @@ export async function getAssetPreview(assetId, { limit = 6 } = {}) {
       indexed_at: chunk.indexed_at,
     })),
   };
+}
+
+const HISTORY_MAX_SIZE = 200;
+
+export async function recordAskRun(input) {
+  const store = await readStore();
+  const run = {
+    run_id: `ask-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    asset_id: input.asset_id || undefined,
+    question: input.question || "",
+    answer_preview: truncate(input.answer || "", 200),
+    provider: input.provider || undefined,
+    retrieval_mode: input.retrieval_mode || undefined,
+    citations_count: Number(input.citations_count) || 0,
+    status: input.status || "succeeded",
+    error: input.error || undefined,
+    created_at: new Date().toISOString(),
+  };
+  const nextAskRuns = [run, ...store.askRuns].slice(0, HISTORY_MAX_SIZE);
+  await writeStore({ ...store, askRuns: nextAskRuns });
+  return run;
+}
+
+export async function recordSearchRun(input) {
+  const store = await readStore();
+  const run = {
+    run_id: `search-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    asset_id: input.asset_id || undefined,
+    query: input.query || "",
+    result_count: Number(input.result_count) || 0,
+    retrieval_mode: input.retrieval_mode || undefined,
+    status: input.status || "succeeded",
+    error: input.error || undefined,
+    created_at: new Date().toISOString(),
+  };
+  const nextSearchRuns = [run, ...store.searchRuns].slice(0, HISTORY_MAX_SIZE);
+  await writeStore({ ...store, searchRuns: nextSearchRuns });
+  return run;
+}
+
+export async function getAskHistory({ assetId, limit = 20 } = {}) {
+  const store = await readStore();
+  const filtered = assetId
+    ? store.askRuns.filter((run) => run.asset_id === assetId)
+    : store.askRuns;
+  return filtered.slice(0, Math.max(1, Math.min(50, Number(limit) || 20)));
+}
+
+export async function getSearchHistory({ assetId, limit = 20 } = {}) {
+  const store = await readStore();
+  const filtered = assetId
+    ? store.searchRuns.filter((run) => run.asset_id === assetId)
+    : store.searchRuns;
+  return filtered.slice(0, Math.max(1, Math.min(50, Number(limit) || 20)));
 }

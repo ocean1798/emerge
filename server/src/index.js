@@ -17,10 +17,18 @@ import {
   createIngestRecord,
   deleteAsset,
   getAssetPreview,
+  getAssetSource,
   getAssetTrace,
+  getAskHistory,
+  getIndexStatus,
+  getSearchHistory,
   readStore,
+  recordAskRun,
+  recordSearchRun,
   saveIngestRecord,
   updateAssetMetadata,
+  reindexChunks,
+  applyReindexResults,
 } from "./store.js";
 import { fetchUrlContent } from "./url-fetcher.js";
 
@@ -251,8 +259,9 @@ async function route(request, response) {
 
   const snapshotMatch = url.pathname.match(/^\/api\/assets\/([^/]+)\/snapshot$/);
   if (request.method === "GET" && snapshotMatch) {
+    const snapshotId = decodeURIComponent(snapshotMatch[1]);
     const store = await readStore();
-    const snapshot = store.snapshots[snapshotMatch[1]];
+    const snapshot = store.snapshots[snapshotId];
     if (!snapshot) {
       sendJson(response, 404, { ok: false, error: "Snapshot not found" });
       return;
@@ -263,7 +272,8 @@ async function route(request, response) {
 
   const previewMatch = url.pathname.match(/^\/api\/assets\/([^/]+)\/preview$/);
   if (request.method === "GET" && previewMatch) {
-    const preview = await getAssetPreview(previewMatch[1], {
+    const previewId = decodeURIComponent(previewMatch[1]);
+    const preview = await getAssetPreview(previewId, {
       limit: Number(url.searchParams.get("limit") || 6),
     });
     if (!preview) {
@@ -274,9 +284,23 @@ async function route(request, response) {
     return;
   }
 
+  const sourceMatch = url.pathname.match(/^\/api\/assets\/([^/]+)\/source$/);
+  if (request.method === "GET" && sourceMatch) {
+    const decodedId = decodeURIComponent(sourceMatch[1]);
+    const source = await getAssetSource(decodedId);
+
+    if (!source) {
+      sendJson(response, 404, { ok: false, error: "Source document not found" });
+      return;
+    }
+    sendJson(response, 200, { ok: true, source });
+    return;
+  }
+
   const traceMatch = url.pathname.match(/^\/api\/assets\/([^/]+)\/trace$/);
   if (request.method === "GET" && traceMatch) {
-    const trace = await getAssetTrace(traceMatch[1]);
+    const traceId = decodeURIComponent(traceMatch[1]);
+    const trace = await getAssetTrace(traceId);
     if (!trace) {
       sendJson(response, 404, { ok: false, error: "Asset trace not found" });
       return;
@@ -287,8 +311,9 @@ async function route(request, response) {
 
   const assetMatch = url.pathname.match(/^\/api\/assets\/([^/]+)$/);
   if (request.method === "PATCH" && assetMatch) {
+    const assetId = decodeURIComponent(assetMatch[1]);
     const body = await readJsonBody(request);
-    const updated = await updateAssetMetadata(assetMatch[1], body);
+    const updated = await updateAssetMetadata(assetId, body);
     if (!updated) {
       sendJson(response, 404, { ok: false, error: "Asset not found" });
       return;
@@ -301,7 +326,8 @@ async function route(request, response) {
   }
 
   if (request.method === "DELETE" && assetMatch) {
-    const deletedAsset = await deleteAsset(assetMatch[1]);
+    const deleteId = decodeURIComponent(assetMatch[1]);
+    const deletedAsset = await deleteAsset(deleteId);
     if (!deletedAsset) {
       sendJson(response, 404, { ok: false, error: "Asset not found" });
       return;
@@ -324,30 +350,64 @@ async function route(request, response) {
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/history/ask") {
+    const assetId = url.searchParams.get("asset_id") || undefined;
+    const limit = Number(url.searchParams.get("limit") || 20);
+    const runs = await getAskHistory({ assetId, limit });
+    sendJson(response, 200, { ok: true, runs });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/history/search") {
+    const assetId = url.searchParams.get("asset_id") || undefined;
+    const limit = Number(url.searchParams.get("limit") || 20);
+    const runs = await getSearchHistory({ assetId, limit });
+    sendJson(response, 200, { ok: true, runs });
+    return;
+  }
+
   if (request.method === "GET" && url.pathname === "/api/search") {
     const query = url.searchParams.get("q") || "";
     const assetId = url.searchParams.get("asset_id") || undefined;
-    const retrieval = await retrieveEvidenceForQuestion({
-      question: query,
-      assetId,
-      limit: Number(url.searchParams.get("limit") || 6),
-    });
-    await recordRetrievalTrace({
-      kind: "search",
-      question: query,
-      assetId,
-      retrieval,
-    });
-    sendJson(response, 200, {
-      query,
-      asset_id: assetId,
-      results: retrieval.results,
-      retrieval: {
-        mode: retrieval.mode,
-        embeddingModel: retrieval.embeddingModel,
-        embeddingError: retrieval.embeddingError,
-      },
-    });
+    try {
+      const retrieval = await retrieveEvidenceForQuestion({
+        question: query,
+        assetId,
+        limit: Number(url.searchParams.get("limit") || 6),
+      });
+      await recordRetrievalTrace({
+        kind: "search",
+        question: query,
+        assetId,
+        retrieval,
+      });
+      await recordSearchRun({
+        asset_id: assetId,
+        query,
+        result_count: retrieval.results.length,
+        retrieval_mode: retrieval.mode,
+        status: "succeeded",
+      });
+      sendJson(response, 200, {
+        query,
+        asset_id: assetId,
+        results: retrieval.results,
+        retrieval: {
+          mode: retrieval.mode,
+          embeddingModel: retrieval.embeddingModel,
+          embeddingError: retrieval.embeddingError,
+        },
+      });
+    } catch (error) {
+      await recordSearchRun({
+        asset_id: assetId,
+        query,
+        result_count: 0,
+        status: "failed",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+      throw error;
+    }
     return;
   }
 
@@ -384,20 +444,30 @@ async function route(request, response) {
     const context = mergeAskContext(body.context || [], retrieval.results);
 
     if (!config.openaiCompatible.apiKey) {
+      const localAnswer = buildLocalRetrievalAnswer({
+        question: body.question,
+        results: retrieval.results,
+      });
       await recordRetrievalTrace({
         kind: "ask",
         question: body.question,
         assetId: body.assetId,
         retrieval,
       });
+      await recordAskRun({
+        asset_id: body.assetId,
+        question: body.question,
+        answer: localAnswer,
+        provider: "local-retrieval",
+        retrieval_mode: retrieval.mode,
+        citations_count: retrieval.results.length,
+        status: "succeeded",
+      });
       sendJson(response, 200, {
         provider: "local-retrieval",
         providerLabel: "Local Retrieval",
         model: retrieval.mode,
-        answer: buildLocalRetrievalAnswer({
-          question: body.question,
-          results: retrieval.results,
-        }),
+        answer: localAnswer,
         citations: retrieval.results,
         retrieval: {
           mode: retrieval.mode,
@@ -420,6 +490,15 @@ async function route(request, response) {
         assetId: body.assetId,
         retrieval,
       });
+      await recordAskRun({
+        asset_id: body.assetId,
+        question: body.question,
+        answer: result.answer,
+        provider: result.provider,
+        retrieval_mode: retrieval.mode,
+        citations_count: retrieval.results.length,
+        status: "succeeded",
+      });
       sendJson(response, 200, {
         ...result,
         citations: retrieval.results,
@@ -430,13 +509,24 @@ async function route(request, response) {
         },
       });
     } catch (error) {
+      const publicError = toPublicProviderError(error);
       await recordRetrievalTrace({
         kind: "ask",
         question: body.question,
         assetId: body.assetId,
         retrieval,
         status: "failed",
-        error: toPublicProviderError(error),
+        error: publicError,
+      });
+      await recordAskRun({
+        asset_id: body.assetId,
+        question: body.question,
+        answer: "",
+        provider: "openai-compatible",
+        retrieval_mode: retrieval.mode,
+        citations_count: 0,
+        status: "failed",
+        error: publicError,
       });
       throw error;
     }
@@ -470,6 +560,99 @@ async function route(request, response) {
       ...record,
       index: indexResult,
     });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/index/status") {
+    const status = await getIndexStatus(config.ollama.embedModel);
+    sendJson(response, 200, { ok: true, ...status });
+    return;
+  }
+
+  async function handleReindex(assetId) {
+    const { store, targetChunks } = await reindexChunks(assetId);
+    if (targetChunks.length === 0) {
+      return { ok: false, error: "No chunks found for reindex", reindexed: 0 };
+    }
+
+    const now = new Date().toISOString();
+    const assetIds = new Set(targetChunks.map((c) => c.asset_id));
+
+    try {
+      const result = await embedWithOllama(targetChunks.map((c) => c.text));
+      const embeddings = Array.isArray(result.embeddings) ? result.embeddings : [];
+      const updatedChunks = targetChunks.map((chunk, index) => ({
+        ...chunk,
+        embedding: Array.isArray(embeddings[index]) ? embeddings[index] : chunk.embedding,
+        embedding_model: Array.isArray(embeddings[index]) ? result.model : chunk.embedding_model,
+        indexed_at: Array.isArray(embeddings[index]) ? now : chunk.indexed_at,
+      }));
+
+      const embeddedCount = updatedChunks.filter((c) =>
+        Array.isArray(c.embedding),
+      ).length;
+      const traceEvents = [...assetIds].map((id) => ({
+        trace_id: `trace-${id}-reindex-${Date.now()}`,
+        asset_id: id,
+        kind: "index",
+        status: "succeeded",
+        title: "reindex",
+        message: `Reindexed ${updatedChunks.length} chunks via ${result.model}`,
+        created_at: now,
+        details: {
+          model: result.model,
+          chunkCount: updatedChunks.length,
+          embeddedCount,
+        },
+      }));
+
+      await applyReindexResults(updatedChunks, traceEvents);
+      return {
+        ok: true,
+        reindexed: updatedChunks.length,
+        embedded: embeddedCount,
+        model: result.model,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown embedding error";
+      const traceEvents = [...assetIds].map((id) => ({
+        trace_id: `trace-${id}-reindex-${Date.now()}`,
+        asset_id: id,
+        kind: "index",
+        status: "failed",
+        title: "reindex",
+        message: `Reindex failed: ${errorMessage}`,
+        created_at: now,
+        details: { error: errorMessage },
+      }));
+
+      await applyReindexResults([], traceEvents);
+      return {
+        ok: false,
+        error: errorMessage,
+        reindexed: 0,
+        fallback: "lexical",
+      };
+    }
+  }
+
+  const reindexAssetMatch = url.pathname.match(/^\/api\/assets\/([^/]+)\/reindex$/);
+  if (request.method === "POST" && reindexAssetMatch) {
+    const assetId = decodeURIComponent(reindexAssetMatch[1]);
+    const store = await readStore();
+    const asset = store.assets.find((a) => a.asset_id === assetId);
+    if (!asset) {
+      sendJson(response, 404, { ok: false, error: "Asset not found" });
+      return;
+    }
+    const result = await handleReindex(assetId);
+    sendJson(response, result.ok ? 200 : 502, result);
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/reindex") {
+    const result = await handleReindex(null);
+    sendJson(response, result.ok ? 200 : 502, result);
     return;
   }
 

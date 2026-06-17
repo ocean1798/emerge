@@ -32,7 +32,6 @@ import {
   type BulkImportSummary,
   type BulkImportSummaryItem,
 } from "./components/BulkImportSummaryModal";
-import { mockAssets, mockPipelineRuns, mockSnapshots } from "./data/mock-assets";
 import { ModelSettingsModal } from "./components/ModelSettingsModal";
 import { NoteComposer } from "./components/NoteComposer";
 import { ObjectList } from "./components/ObjectList";
@@ -257,7 +256,7 @@ export default function App() {
   const [localAssets, setLocalAssets] = useState<Asset[]>([]);
   const [localSnapshots, setLocalSnapshots] = useState<Record<string, SemanticSnapshot>>({});
   const [localPipelineRuns, setLocalPipelineRuns] = useState<PipelineRun[]>([]);
-  const [selectedAssetId, setSelectedAssetId] = useState(mockAssets[0]?.asset_id);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState(t("app.ready"));
   const [askResult, setAskResult] = useState<AskResult>({ status: "idle" });
   const [isNoteComposerOpen, setIsNoteComposerOpen] = useState(false);
@@ -287,15 +286,9 @@ export default function App() {
     useState<BulkImportSummary | null>(null);
   const [dragDepth, setDragDepth] = useState(0);
 
-  const assets = useMemo(() => mergeAssets(mockAssets, localAssets), [localAssets]);
-  const snapshots = useMemo(
-    () => ({ ...mockSnapshots, ...localSnapshots }),
-    [localSnapshots],
-  );
-  const pipelineRuns = useMemo(
-    () => [...localPipelineRuns, ...mockPipelineRuns],
-    [localPipelineRuns],
-  );
+  const assets = localAssets;
+  const snapshots = localSnapshots;
+  const pipelineRuns = localPipelineRuns;
 
   const sourceCounts = useMemo(() => buildSourceCounts(assets), [assets]);
 
@@ -953,7 +946,7 @@ export default function App() {
         current.filter((run) => run.asset_id !== deleted.asset_id),
       );
       setAskResult({ status: "idle" });
-      setSelectedAssetId(mockAssets[0]?.asset_id);
+      setSelectedAssetId(undefined);
       setNotice(t("app.deleteDone", { title: deleted.title }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -1004,7 +997,7 @@ export default function App() {
       {isDragActive ? (
         <div className="drop-overlay" role="status">
           <div className="drop-overlay__panel">
-            <UploadCloud size={30} aria-hidden="true" />
+            <UploadCloud size={40} aria-hidden="true" />
             <strong>{t("bulkImport.dropTitle")}</strong>
             <span>{t("bulkImport.dropHint")}</span>
           </div>

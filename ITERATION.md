@@ -20,11 +20,11 @@
 | [iter-016](iterations/iter-016-object-content-preview/ITER.md) | 对象内容预览 | ✅ | 2026-06-14 | 2026-06-14 |
 | [iter-017](iterations/iter-017-llm-embedding-config-hardening/ITER.md) | LLM 与本地 Embedding 配置加固 | ✅ | 2026-06-15 | 2026-06-15 |
 | [iter-018](iterations/iter-018-trace-history/ITER.md) | Trace / 操作历史 | ✅ | 2026-06-15 | 2026-06-15 |
-| [iter-019](iterations/iter-019-ai-file-manager-bulk-ingest/ITER.md) | AI 文件管理和批量导入 | ⬜ | 2026-06-15 | - |
-| [iter-020](iterations/iter-020-embedding-reindex-status/ITER.md) | Embedding 状态和重建索引 | ⬜ | - | - |
-| [iter-021](iterations/iter-021-original-content-storage/ITER.md) | 原始内容存储和预览 | ⬜ | - | - |
-| [iter-022](iterations/iter-022-ask-search-history/ITER.md) | Ask/Search History | ⬜ | - | - |
-| [iter-023](iterations/iter-023-desktop-shell-keychain/ITER.md) | 桌面壳和 Keychain | ⬜ | - | - |
-| [iter-024](iterations/iter-024-mvp-hardening-release/ITER.md) | MVP Hardening Release | ⬜ | - | - |
+| [iter-019](iterations/iter-019-ai-file-manager-bulk-ingest/ITER.md) | AI 文件管理和批量导入 | ✅ | 2026-06-15 | 2026-06-16 |
+| [iter-020](iterations/iter-020-embedding-reindex-status/ITER.md) | Embedding 状态和重建索引 | ✅ | 2026-06-16 | 2026-06-16 |
+| [iter-021](iterations/iter-021-original-content-storage/ITER.md) | 原始内容存储和预览 | ✅ | 2026-06-16 | 2026-06-16 |
+| [iter-022](iterations/iter-022-ask-search-history/ITER.md) | Ask/Search History | ✅ | 2026-06-16 | 2026-06-16 |
+| [iter-023](iterations/iter-023-desktop-shell-keychain/ITER.md) | 桌面壳和 Keychain | ✅ | 2026-06-16 | 2026-06-16 |
+| [iter-024](iterations/iter-024-mvp-hardening-release/ITER.md) | MVP Hardening Release | ✅ | 2026-06-16 | 2026-06-16 |
 
 状态：✅ 完成 | 🔄 进行中 | ⬜ 未开始 | ⚠️ 低质量通过

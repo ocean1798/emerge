@@ -1,10 +1,14 @@
 import type {
   AskCitation,
+  AskRun,
   Asset,
+  IndexStatus,
   ObjectTrace,
   ObjectPreview,
   PipelineRun,
+  ReindexResult,
   SearchResult,
+  SearchRun,
   SemanticSnapshot,
 } from "../types/domain";
 
@@ -271,6 +275,33 @@ export async function getLocalObjectPreview(assetId: string, limit = 6) {
   };
 }
 
+export interface ObjectSourceResponse {
+  source_id: string;
+  asset_id: string;
+  title: string;
+  kind: string;
+  source_uri: string;
+  content: string;
+  char_count: number;
+  truncated: boolean;
+  created_at: string;
+}
+
+export async function getLocalObjectSource(assetId: string) {
+  const response = await fetch(
+    `http://127.0.0.1:8787/api/assets/${encodeURIComponent(assetId)}/source`,
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error || `API failed with ${response.status}`);
+  }
+
+  return payload as {
+    ok: boolean;
+    source: ObjectSourceResponse;
+  };
+}
+
 export async function getLocalObjectTrace(assetId: string) {
   const response = await fetch(
     `http://127.0.0.1:8787/api/assets/${encodeURIComponent(assetId)}/trace`,
@@ -353,4 +384,62 @@ export async function ingestLocalFile(input: {
   }
 
   return payload as IngestApiResponse;
+}
+
+export async function getIndexStatus() {
+  const response = await fetch("http://127.0.0.1:8787/api/index/status");
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error || `API failed with ${response.status}`);
+  }
+  return payload as IndexStatus;
+}
+
+export async function reindexAsset(assetId: string) {
+  const response = await fetch(
+    `http://127.0.0.1:8787/api/assets/${encodeURIComponent(assetId)}/reindex`,
+    { method: "POST" },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok && !payload.ok) {
+    throw new Error(payload.error || `API failed with ${response.status}`);
+  }
+  return payload as ReindexResult;
+}
+
+export async function reindexAll() {
+  const response = await fetch("http://127.0.0.1:8787/api/reindex", {
+    method: "POST",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok && !payload.ok) {
+    throw new Error(payload.error || `API failed with ${response.status}`);
+  }
+  return payload as ReindexResult;
+}
+
+export async function getAskHistory(input?: { assetId?: string; limit?: number }) {
+  const params = new URLSearchParams();
+  if (input?.assetId) params.set("asset_id", input.assetId);
+  if (input?.limit) params.set("limit", String(input.limit));
+  const qs = params.toString();
+  const response = await fetch(`http://127.0.0.1:8787/api/history/ask${qs ? `?${qs}` : ""}`);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error || `API failed with ${response.status}`);
+  }
+  return payload as { ok: boolean; runs: AskRun[] };
+}
+
+export async function getSearchHistory(input?: { assetId?: string; limit?: number }) {
+  const params = new URLSearchParams();
+  if (input?.assetId) params.set("asset_id", input.assetId);
+  if (input?.limit) params.set("limit", String(input.limit));
+  const qs = params.toString();
+  const response = await fetch(`http://127.0.0.1:8787/api/history/search${qs ? `?${qs}` : ""}`);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error || `API failed with ${response.status}`);
+  }
+  return payload as { ok: boolean; runs: SearchRun[] };
 }
